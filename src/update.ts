@@ -36,6 +36,7 @@ const state: UpdateState = {
   checkedAt: 0,
 }
 let manifestUrl = ''
+const DEFAULT_MANIFEST_URL = 'https://github.com/yyywming/wbpilot/releases/latest/download/latest.json'
 let availableManifest: UpdateManifest | null = null
 
 export function currentVersion(): string {
@@ -88,10 +89,12 @@ async function readManifestUrl(): Promise<string> {
   try {
     const raw = await readFile(dataFile('update.config.json'), 'utf8')
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    return typeof parsed['manifestUrl'] === 'string' ? parsed['manifestUrl'].trim() : ''
+    const configured = typeof parsed['manifestUrl'] === 'string' ? parsed['manifestUrl'].trim() : ''
+    if (configured !== '') return configured
   } catch {
-    return ''
+    // 没有本地配置时使用默认更新源
   }
+  return DEFAULT_MANIFEST_URL
 }
 
 async function fetchJson(url: string): Promise<unknown> {
