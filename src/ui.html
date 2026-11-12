@@ -217,11 +217,12 @@
       <div class="card-head">
         <div>
           <h2 class="card-title">账号库 <span class="badge" id="wbAccountCount">0</span></h2>
-          <p class="card-sub">导入 WorkBuddy 账号 JSON 或扫码登录；账号保存在本机，可批量签到、成长任务与派猫旅行。CodeBuddy 账号可导入查看，但不能切换到 WorkBuddy 客户端。</p>
+          <p class="card-sub">导入账号 JSON 或扫码登录；WorkBuddy / CodeBuddy 账号都可批量签到、成长任务、派猫旅行与网关调用。CodeBuddy 账号仅禁止写入 WorkBuddy 客户端登录态。</p>
         </div>
         <div class="row">
           <select id="wbVariant"><option value="cn">WorkBuddy 国内版</option><option value="ai">WorkBuddy 国际版</option></select>
-          <button class="act" data-act="login-start">扫码登录</button>
+          <button class="act" data-act="login-start" data-platform="workbuddy">扫码 WorkBuddy</button>
+          <button class="act" data-act="login-start" data-platform="ide">扫码 CodeBuddy</button>
           <input type="file" id="wbImportFile" accept=".json,application/json" style="display:none">
           <button class="ghost" data-act="import-json">导入 JSON</button>
           <span class="muted" id="wbLoginState"></span>
@@ -506,11 +507,11 @@ function showOpLogDetail(i) {
 
 /* ── 账号助手 ── */
 let wbLoginId = null, wbTimer = null;
-async function wbLogin() {
+async function wbLogin(platform) {
   // 重复点击会覆盖 wbTimer 且旧轮询永远停不下来（每 2.5s 刷一次页面，冲掉未保存的编辑）
   if (wbTimer) clearInterval(wbTimer);
   const variant = document.getElementById('wbVariant').value;
-  const start = await api('/login/start', 'POST', { variant });
+  const start = await api('/login/start', 'POST', { variant, platform });
   document.getElementById('wbLoginState').innerHTML = '<a target="_blank" href="' + esc(start.verificationUri) + '">打开授权页</a>';
   const loginId = start.loginId;
   wbLoginId = loginId;
@@ -567,7 +568,8 @@ async function loadWb() {
         list.map(metaRow).join('') + '</tbody></table>'
       : '<div class="empty"><div class="empty-icon">＋</div><b>还没有账号</b>' +
         '<span class="muted">扫码登录可直接获取明文凭据；也可以导入包含 accessToken 的账号 JSON 文件。</span>' +
-        '<div class="row"><button class="act" data-act="login-start">扫码登录</button>' +
+        '<div class="row"><button class="act" data-act="login-start" data-platform="workbuddy">扫码 WorkBuddy</button>' +
+        '<button class="act" data-act="login-start" data-platform="ide">扫码 CodeBuddy</button>' +
         '<button class="ghost" data-act="import-json">导入 JSON</button></div></div>';
   } catch {}
   try {
@@ -924,7 +926,7 @@ document.addEventListener('click', async (ev) => {
   btn.disabled = true;
   try {
     switch (act) {
-      case 'login-start': await wbLogin(); break;
+      case 'login-start': await wbLogin(btn.dataset.platform || 'workbuddy'); break;
       case 'import-json': document.getElementById('wbImportFile').click(); break;
       case 'run-all': await wbRunAll(); break;
       case 'update-check': await checkUpdateUI(false); break;

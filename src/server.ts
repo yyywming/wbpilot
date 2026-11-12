@@ -76,7 +76,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
 
     if (route === '/login/start' && method === 'POST') {
       const variant = body['variant'] === 'ai' ? 'ai' : 'cn'
-      const start = await oauth.oauthStart(variant)
+      const platform = typeof body['platform'] === 'string' ? body['platform'] : undefined
+      const start = await oauth.oauthStart(variant, platform)
       return replyJson(res, 200, start)
     }
     if (route === '/login/poll' && method === 'GET') {

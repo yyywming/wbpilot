@@ -34,6 +34,7 @@ export interface OAuthPollResult {
 
 interface OAuthInfo {
   variant: WbVariant
+  platform?: string
   state: string
   expiresAt: number // secs
   done: boolean
@@ -142,20 +143,25 @@ export class OAuthFlow {
     this.saveAccount = saveAccount
   }
 
-  oauthUrls(variant: WbVariant) {
-    const endpoint = variantOauthEndpoint(variant)
+  oauthUrls(variant: WbVariant, platformOverride?: string) {
+    const requested = platformOverride?.trim()
+    const platform = requested || variantOauthPlatform(variant)
+    // CodeBuddy 平台（ide）与 WorkBuddy 是两套登录域：换码、账号资料也必须同域。
+    const endpoint = requested && variant === 'cn' && /^ide/i.test(requested)
+      ? 'https://www.codebuddy.cn'
+      : variantOauthEndpoint(variant)
     const prefix = variantApiPrefix(variant)
-    const platform = variantOauthPlatform(variant)
     return {
-      state: `${endpoint}${prefix}/auth/state?platform=${platform}`,
+      state: `${endpoint}${prefix}/auth/state?platform=${encodeURIComponent(platform)}`,
       token: `${endpoint}${prefix}/auth/token`,
       account: `${endpoint}${prefix}/login/account`,
     }
   }
 
-  async oauthStart(variant: WbVariant): Promise<OAuthStartResult> {
+  async oauthStart(variant: WbVariant, platformOverride?: string): Promise<OAuthStartResult> {
     const loginId = `wb_${crypto.randomUUID().replace(/-/g, '')}`
-    const urls = this.oauthUrls(variant)
+    const platform = platformOverride?.trim() || variantOauthPlatform(variant)
+    const urls = this.oauthUrls(variant, platform)
     const response = await this.http(urls.state, 'POST', {})
     const data = dataOf(response)
     const state = str(data['state'])
@@ -164,7 +170,7 @@ export class OAuthFlow {
     }
     const authUrl =
       str(data['authUrl']) || str(data['auth_url']) || str(data['url']) || `${variantOauthEndpoint(variant)}/login?state=${state}`
-    this.states.set(loginId, { variant, state, expiresAt: this.now() + OAUTH_TIMEOUT_SECS, done: false })
+    this.states.set(loginId, { variant, platform, state, expiresAt: this.now() + OAUTH_TIMEOUT_SECS, done: false })
     return { loginId, verificationUri: authUrl, expiresIn: OAUTH_TIMEOUT_SECS }
   }
 
@@ -177,7 +183,7 @@ export class OAuthFlow {
       info.error = '登录超时'
       return { done: true, error: info.error }
     }
-    const urls = this.oauthUrls(info.variant)
+    const urls = this.oauthUrls(info.variant, info.platform)
     const tokenResponse = await this.http(`${urls.token}?state=${encodeURIComponent(info.state)}`, 'GET')
     const code = codeOf(tokenResponse)
     if (code !== 0 && code !== 200) return { done: false }

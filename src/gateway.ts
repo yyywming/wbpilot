@@ -17,13 +17,32 @@ import { dataFile, loadAccounts, currentAccounts, persistAccounts, readConfig, w
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { buildAuthHeaders, findAccountIn, getStr, isEnvelope, type WbAccount } from './core/account.ts'
+import { accountIssuer, buildAuthHeaders, findAccountIn, getStr, isEnvelope, type WbAccount } from './core/account.ts'
 import { refreshAccountToken } from './core/refresh.ts'
 
 const UPSTREAM_HOST = 'https://www.workbuddy.cn'
 const UPSTREAM_FAILOVER_HOST = 'https://wb.tencentbuddy.com'
 const UPSTREAM_PATH = '/v2/chat/completions'
 const REFRESH_COOLDOWN_MS = 5_000
+
+/**
+ * Upstream API host by credential issuer: CodeBuddy-issued tokens must hit the
+ * CodeBuddy host; WorkBuddy-issued tokens hit the WorkBuddy host. Tokens are
+ * not interchangeable across the two products (APISIX rejects them).
+ */
+export function upstreamHostFor(account: WbAccount): string {
+  const raw = getStr(account, 'domain') || accountIssuer(account) || ''
+  let host = ''
+  try {
+    host = new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase()
+  } catch {
+    return UPSTREAM_HOST
+  }
+  if (host === 'codebuddy.cn' || host.endsWith('.codebuddy.cn')) return 'https://www.codebuddy.cn'
+  if (host === 'codebuddy.ai' || host.endsWith('.codebuddy.ai')) return 'https://www.codebuddy.ai'
+  if (host === 'workbuddy.ai' || host.endsWith('.workbuddy.ai')) return 'https://www.workbuddy.ai'
+  return UPSTREAM_HOST
+}
 
 /** 离线兜底目录：仅在 /v3/config 拉取失败且本地无缓存时使用。线上清单以远程为准。 */
 export const OFFICIAL_MODEL_CATALOG = [
@@ -147,7 +166,7 @@ export function learnModelInCatalog(catalog: ModelInfo[], id: string, now: numbe
  * 确认不存在）时成立——限流/风控/5xx 等临时错误为 exists=undefined，不据此剔除。
  */
 export async function probeModel(account: WbAccount, model: string): Promise<{ available: boolean; exists?: boolean; note?: string }> {
-  const response = await fetch(UPSTREAM_HOST + UPSTREAM_PATH, {
+  const response = await fetch(upstreamHostFor(account) + UPSTREAM_PATH, {
     method: 'POST',
     headers: { ...(await gatewayHeaders(account)), 'content-type': 'application/json' },
     body: JSON.stringify({ model, stream: true, max_tokens: 1, thinking: { type: 'disabled' }, messages: [{ role: 'user', content: 'hi' }] }),
@@ -166,6 +185,7 @@ export async function probeModel(account: WbAccount, model: string): Promise<{ a
  * 拉取失败返回 error，由调用方决定回退本地缓存。
  */
 export async function fetchModelCatalog(account: WbAccount): Promise<{ models: ModelInfo[]; error?: string }> {
+  const base = upstreamHostFor(account)
   const headers = { ...(await gatewayHeaders(account)), 'x-requested-with': 'XMLHttpRequest' }
   const getJson = async (url: string): Promise<{ data?: { models?: unknown; discounts?: unknown } } | undefined> => {
     const response = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
@@ -174,14 +194,14 @@ export async function fetchModelCatalog(account: WbAccount): Promise<{ models: M
   }
   let primary: ModelInfo[] = []
   let sawAny = false
-  const v3 = await getJson(UPSTREAM_HOST + '/v3/config').catch(() => undefined)
+  const v3 = await getJson(base + '/v3/config').catch(() => undefined)
   if (v3?.data && Array.isArray(v3.data.models)) {
     primary = parseModelCatalog(v3.data)
     sawAny = true
   }
   let supplement: ModelInfo[] = []
   for (const path of ['/v2/enterprises/personal/models', '/console/enterprises/personal/models']) {
-    const enterprise = await getJson(UPSTREAM_HOST + path).catch(() => undefined)
+    const enterprise = await getJson(base + path).catch(() => undefined)
     if (enterprise?.data && Array.isArray(enterprise.data.models)) {
       supplement = parseEnterpriseModels(enterprise.data)
       sawAny = true
@@ -493,7 +513,10 @@ export async function activeGatewayAccount(): Promise<{ account?: WbAccount; err
   let account = config.activeAccountId ? findAccountIn(currentAccounts(), config.activeAccountId) : undefined
   if (!account) {
     account = currentAccounts().find(
-      (entry) => typeof entry['access_token'] === 'string' && String(entry['access_token']).trim() !== '',
+      (entry) =>
+        !isEnvelope(entry, 'access_token') &&
+        typeof entry['access_token'] === 'string' &&
+        String(entry['access_token']).trim() !== '',
     )
   }
   if (!account) return { error: '没有可用账号（未添加或凭据为加密信封态）' }
@@ -589,6 +612,11 @@ export function summarizeUsage(entries: UsageEntry[], now: number): UsageSummary
 /** 汇总当前运行时台账（含持久化历史）。 */
 export function usageSummary(): UsageSummary {
   return summarizeUsage(usageRing, Date.now())
+}
+
+/** HTTP header values must be ASCII; nicknames are often Chinese. */
+export function headerSafe(value: string): string {
+  return value.replace(/[^\x20-\x7e]/g, '?')
 }
 
 export function accountName(account: WbAccount): string {
@@ -905,6 +933,7 @@ export async function upstreamCall(account: WbAccount, body: Record<string, unkn
 }
 
 async function upstreamCallInner(account: WbAccount, effective: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+  const primaryHost = upstreamHostFor(account)
   // 内部总控：客户端断开（外部 signal）与内部超时共用一个 controller
   const controller = new AbortController()
   signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
@@ -930,14 +959,14 @@ async function upstreamCallInner(account: WbAccount, effective: Record<string, u
   }
   let response: Response
   try {
-    response = sealBody(await attempt(UPSTREAM_HOST))
+    response = sealBody(await attempt(primaryHost))
   } catch (error) {
     clearTimeout(ttfbTimer)
     // 首包超时/网络失败统一转成可读错误（客户端主动断开保持 AbortError 原样上抛）
     if (controller.signal.aborted && !signal?.aborted) throw new Error('上游无响应（连接/首包超时 120s）')
     throw error
   }
-  if (response.status >= 500) response = sealBody(await attempt(UPSTREAM_FAILOVER_HOST))
+  if (response.status >= 500 && primaryHost === UPSTREAM_HOST) response = sealBody(await attempt(UPSTREAM_FAILOVER_HOST))
   if (response.status === 401 && Date.now() - lastRefreshAt > REFRESH_COOLDOWN_MS) {
     lastRefreshAt = Date.now()
     const result = await refreshAccountToken(account, async (updated) => {
@@ -945,7 +974,7 @@ async function upstreamCallInner(account: WbAccount, effective: Record<string, u
       if (index >= 0) currentAccounts()[index] = updated
       await persistAccounts()
     })
-    if (result.ok) response = sealBody(await attempt(UPSTREAM_HOST))
+    if (result.ok) response = sealBody(await attempt(primaryHost))
   }
   // 11128 通道风控拦截是官方提示可重发的瞬时错误——自动重发一次
   if (response.status === 400) {
@@ -963,8 +992,8 @@ async function upstreamCallInner(account: WbAccount, effective: Record<string, u
       } catch {}
       await new Promise((resolve) => setTimeout(resolve, 800))
       await new Promise((resolve) => setTimeout(resolve, 800))
-      response = sealBody(await attempt(UPSTREAM_HOST))
-      if (response.status >= 500) response = sealBody(await attempt(UPSTREAM_FAILOVER_HOST))
+      response = sealBody(await attempt(primaryHost))
+      if (response.status >= 500 && primaryHost === UPSTREAM_HOST) response = sealBody(await attempt(UPSTREAM_FAILOVER_HOST))
       let retryText = response.ok ? '' : await response.text().catch(() => '')
       // 重发仍被拦：最后兜底——system/developer 整体替换为极简中性提示词再试
       // 一次（客户端项目上下文会丢，故仅此一次、仅 11128 持续时触发）
@@ -977,8 +1006,8 @@ async function upstreamCallInner(account: WbAccount, effective: Record<string, u
             body: JSON.stringify(degraded),
             signal: controller.signal,
           })
-        response = sealBody(await attemptDegraded(UPSTREAM_HOST))
-        if (response.status >= 500) response = sealBody(await attemptDegraded(UPSTREAM_FAILOVER_HOST))
+        response = sealBody(await attemptDegraded(primaryHost))
+        if (response.status >= 500 && primaryHost === UPSTREAM_HOST) response = sealBody(await attemptDegraded(UPSTREAM_FAILOVER_HOST))
         retryText = response.ok ? '' : await response.text().catch(() => '')
       }
       if (!response.ok) {
@@ -1155,7 +1184,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
     }))
     if (calls.length > 0) message['tool_calls'] = calls
     if (reasoning !== '' && !suppressReasoning) message['reasoning_content'] = reasoning
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-wb-account': accountName(active.account) })
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-wb-account': headerSafe(accountName(active.account)) })
     res.end(JSON.stringify({
       id: `chatcmpl-${randomUUID()}`,
       object: 'chat.completion',
@@ -1177,7 +1206,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-cache, no-transform',
     connection: 'keep-alive',
-    'x-wb-account': accountName(active.account),
+    'x-wb-account': headerSafe(accountName(active.account)),
   })
   // streaming passthrough with an empty-response guard: deltas forward live;
   // if the model spent the whole budget on reasoning (content stayed empty),
@@ -1481,7 +1510,7 @@ async function handleAnthropicMessages(req: IncomingMessage, res: ServerResponse
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
       connection: 'keep-alive',
-      'x-wb-account': accountName(active.account),
+      'x-wb-account': headerSafe(accountName(active.account)),
     })
     const emit = (event: AnthropicStreamEvent): void => {
       if (!res.writableEnded) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
@@ -1575,7 +1604,7 @@ async function handleAnthropicMessages(req: IncomingMessage, res: ServerResponse
   }
   if (content.length === 0) content.push({ type: 'text', text: '' })
 
-  res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-wb-account': accountName(active.account) })
+  res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-wb-account': headerSafe(accountName(active.account)) })
   res.end(
     JSON.stringify({
       id: `msg_${randomUUID()}`,
