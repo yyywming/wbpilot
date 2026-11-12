@@ -63,9 +63,9 @@ describe('flow urls', () => {
   it('follow the initiating variant', () => {
     const flow = new OAuthFlow(async () => ({}))
     const cn = flow.oauthUrls('cn')
-    expect(cn.state).toBe('https://www.codebuddy.cn/v2/plugin/auth/state?platform=workbuddy')
-    expect(cn.token).toBe('https://www.codebuddy.cn/v2/plugin/auth/token')
-    expect(cn.account).toBe('https://www.codebuddy.cn/v2/plugin/login/account')
+    expect(cn.state).toBe('https://www.workbuddy.cn/v2/plugin/auth/state?platform=workbuddy')
+    expect(cn.token).toBe('https://www.workbuddy.cn/v2/plugin/auth/token')
+    expect(cn.account).toBe('https://www.workbuddy.cn/v2/plugin/login/account')
     const ai = flow.oauthUrls('ai')
     expect(ai.state).toBe('https://www.workbuddy.ai/v2/plugin/auth/state?platform=workbuddy-ai')
     expect(ai.account).toBe('https://www.workbuddy.ai/v2/plugin/login/account')

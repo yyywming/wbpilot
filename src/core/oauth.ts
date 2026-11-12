@@ -6,7 +6,7 @@
 import { buildAuthHeaders, getStr, isEnvelope, upsertCollectedAccount, type WbAccount } from './account.ts'
 import { isPlainObject, nowMs, nowSecs } from './util.ts'
 import {
-  variantApiEndpoint,
+  variantOauthEndpoint,
   variantApiPrefix,
   variantMatchesDomain,
   variantOauthPlatform,
@@ -143,7 +143,7 @@ export class OAuthFlow {
   }
 
   oauthUrls(variant: WbVariant) {
-    const endpoint = variantApiEndpoint(variant)
+    const endpoint = variantOauthEndpoint(variant)
     const prefix = variantApiPrefix(variant)
     const platform = variantOauthPlatform(variant)
     return {
@@ -163,7 +163,7 @@ export class OAuthFlow {
       throw new Error(`auth/state 响应缺少 state: ${JSON.stringify(response).slice(0, 300)}`)
     }
     const authUrl =
-      str(data['authUrl']) || str(data['auth_url']) || str(data['url']) || `${variantApiEndpoint(variant)}/login?state=${state}`
+      str(data['authUrl']) || str(data['auth_url']) || str(data['url']) || `${variantOauthEndpoint(variant)}/login?state=${state}`
     this.states.set(loginId, { variant, state, expiresAt: this.now() + OAUTH_TIMEOUT_SECS, done: false })
     return { loginId, verificationUri: authUrl, expiresIn: OAUTH_TIMEOUT_SECS }
   }

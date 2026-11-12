@@ -29,7 +29,16 @@ export function refreshHeaders(account: WbAccount, refreshToken: string): Record
   }
 }
 
-export function refreshUrl(variant: WbVariant): string {
+export function refreshUrl(variant: WbVariant, domain?: string): string {
+  const host = (domain ?? '').trim()
+  if (host !== '') {
+    try {
+      const origin = new URL(host.includes('://') ? host : `https://${host}`).origin
+      return `${origin}${variantApiPrefix(variant)}/auth/token/refresh`
+    } catch {
+      // 无法解析时回退到 variant 默认域
+    }
+  }
   return `${variantApiEndpoint(variant)}${variantApiPrefix(variant)}/auth/token/refresh`
 }
 
@@ -93,7 +102,7 @@ export async function refreshAccountToken(
     await upsert(updated)
     return { account: updated, ok: false, error: updated['needs_relogin_reason'] as string }
   }
-  const response = await http(refreshUrl(variant), 'POST', {}, refreshHeaders(updated, refreshToken))
+  const response = await http(refreshUrl(variant, getStr(updated, 'domain')), 'POST', {}, refreshHeaders(updated, refreshToken))
   const code = codeOf(response)
   if (code !== 0 && code !== 200) {
     const message = str(response, 'message') || str(response, 'msg') || '未知错误'

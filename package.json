@@ -1,9 +1,9 @@
 {
   "name": "wb-pilot",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packageManager": "pnpm@11.7.0",
-  "description": "多账号批量签到、成长任务与账号管理工具（Electron 便携版）",
+  "description": "WorkBuddy 多账号任务助手（批量签到 / 成长任务 / 旅行 / 本地网关）",
   "type": "module",
   "license": "MIT",
   "keywords": [

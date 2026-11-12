@@ -1,6 +1,8 @@
-# WB Pilot
+# WB Pilot — WorkBuddy 多账号任务助手
 
-Windows 多账号任务中枢：账号导入、批量签到、成长任务、猫猫旅行、积分查询，另带一个本地 OpenAI / Anthropic 兼容网关。
+面向 **WorkBuddy（workbuddy.cn）** 的多账号任务中枢：账号导入、批量签到、成长任务、猫猫旅行、积分查询，另带一个本地 OpenAI / Anthropic 兼容网关。
+
+> 账号来源说明：WorkBuddy 账号（`www.workbuddy.cn` 签发）可正常执行全部任务；CodeBuddy 账号（`www.codebuddy.cn` 签发）可以导入查看，但会被禁止切换到 WorkBuddy 客户端。
 
 > 独立桌面程序，**不需要**安装或运行 WorkBuddy 客户端即可执行任务。
 
@@ -16,7 +18,7 @@ Windows 多账号任务中枢：账号导入、批量签到、成长任务、猫
 
 ## 下载
 
-- GitHub Releases：<https://github.com/Wumingyd/wbpilot/releases>
+- GitHub Releases：<https://github.com/yyywming/wbpilot/releases>
 - 蓝奏云：见发行说明
 
 | 文件 | 说明 |

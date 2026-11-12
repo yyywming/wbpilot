@@ -197,7 +197,7 @@
     <div class="brand-mark">WB</div>
     <div class="brand-text">
       <strong>WB Pilot</strong>
-      <span>多账号任务中枢 · 签到 / 成长任务 / 旅行 / 网关</span>
+      <span>WorkBuddy 多账号任务中枢 · 签到 / 成长任务 / 旅行 / 网关</span>
     </div>
   </div>
   <button class="ghost" data-act="show-declaration">使用声明</button>
@@ -217,10 +217,10 @@
       <div class="card-head">
         <div>
           <h2 class="card-title">账号库 <span class="badge" id="wbAccountCount">0</span></h2>
-          <p class="card-sub">导入账号 JSON 或扫码登录；账号保存在本机，可批量签到、做成长任务与派猫旅行。</p>
+          <p class="card-sub">导入 WorkBuddy 账号 JSON 或扫码登录；账号保存在本机，可批量签到、成长任务与派猫旅行。CodeBuddy 账号可导入查看，但不能切换到 WorkBuddy 客户端。</p>
         </div>
         <div class="row">
-          <select id="wbVariant"><option value="cn">国内版 (cn)</option><option value="ai">国际版 (ai)</option></select>
+          <select id="wbVariant"><option value="cn">WorkBuddy 国内版</option><option value="ai">WorkBuddy 国际版</option></select>
           <button class="act" data-act="login-start">扫码登录</button>
           <input type="file" id="wbImportFile" accept=".json,application/json" style="display:none">
           <button class="ghost" data-act="import-json">导入 JSON</button>
@@ -537,7 +537,7 @@ function metaRow(a) {
   const exp = a.expiresAt ? new Date(a.expiresAt).toLocaleString() : '—';
   const state = a.needsRelogin ? '<span class="pill err">需重登</span>' : '<span class="pill ok">正常</span>';
   const platformTag = a.platform === 'codebuddy'
-    ? '<span class="pill warn" title="' + esc(a.switchBlockedReason || '') + '">CodeBuddy</span>'
+    ? '<span class="pill warn" title="' + esc(a.switchBlockedReason || '') + '">CodeBuddy 账号</span>'
     : '';
   const switchBtn = a.canSwitch === false
     ? '<button class="ghost" disabled title="' + esc(a.switchBlockedReason || '') + '">切换</button>'

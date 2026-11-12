@@ -50,6 +50,11 @@ export function variantMatchesDomain(variant: WbVariant, domain: string | null |
   return variant === 'ai' ? isAi : !isAi
 }
 
+/** OAuth 登录页/换码所在域：国内版用 WorkBuddy 域，国际版用 WorkBuddy AI 域。 */
+export function variantOauthEndpoint(variant: WbVariant): string {
+  return variant === 'ai' ? AI_API_ENDPOINT : 'https://www.workbuddy.cn'
+}
+
 export function variantApiEndpoint(variant: WbVariant): string {
   return variant === 'ai' ? AI_API_ENDPOINT : WORKBUDDY_API_ENDPOINT
 }
