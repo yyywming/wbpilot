@@ -12,6 +12,7 @@ import { networkInterfaces } from 'node:os'
 import {
   checkinCycle,
   growthCycle,
+  exportAccountsJson,
   importAccountsJson,
   importLocal,
   oauth,
@@ -93,6 +94,9 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
     }
     if (route === '/accounts/import-local' && method === 'POST') {
       return replyJson(res, 200, await importLocal(body['variant'] === 'ai' ? 'ai' : 'cn'))
+    }
+    if (route === '/accounts/export' && method === 'GET') {
+      return replyJson(res, 200, await exportAccountsJson())
     }
     if (route === '/accounts/import-json' && method === 'POST') {
       const content = typeof body['content'] === 'string' ? body['content'] : ''

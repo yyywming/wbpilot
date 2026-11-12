@@ -91,3 +91,40 @@ describe('parseAccountsJson', () => {
     expect(() => parseAccountsJson('not json')).toThrow('文件不是有效的 JSON')
   })
 })
+
+describe('export bundle round trip', () => {
+  it('re-imports the exported {version, exportedAt, accounts[]} shape', () => {
+    const bundle = {
+      version: 1,
+      exportedAt: 1_700_000_000_000,
+      accounts: [
+        {
+          uid: 'u-cb',
+          nickname: '155****6274',
+          email: null,
+          domain: 'www.codebuddy.cn',
+          variant: 'cn',
+          access_token: 'at-cb',
+          refresh_token: 'rt-cb',
+          token_type: 'Bearer',
+          expiresAt: 1_795_132_803_000,
+        },
+        {
+          uid: 'u-wb',
+          nickname: '无名',
+          domain: 'www.workbuddy.cn',
+          variant: 'cn',
+          access_token: 'at-wb',
+          refresh_token: 'rt-wb',
+          expiresAt: 1_795_132_803_000,
+        },
+      ],
+    }
+    const parsed = parseAccountsJson(JSON.stringify(bundle))
+    expect(parsed.skipped).toEqual([])
+    expect(parsed.accounts.map((account) => account['uid'])).toEqual(['u-cb', 'u-wb'])
+    expect(parsed.accounts[0]!['access_token']).toBe('at-cb')
+    expect(parsed.accounts[0]!['domain']).toBe('www.codebuddy.cn')
+    expect(parsed.accounts[1]!['refresh_token']).toBe('rt-wb')
+  })
+})

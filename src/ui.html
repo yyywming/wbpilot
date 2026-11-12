@@ -223,8 +223,9 @@
           <select id="wbVariant"><option value="cn">WorkBuddy 国内版</option><option value="ai">WorkBuddy 国际版</option></select>
           <button class="act" data-act="login-start" data-platform="workbuddy">扫码 WorkBuddy</button>
           <button class="act" data-act="login-start" data-platform="ide">扫码 CodeBuddy</button>
-          <input type="file" id="wbImportFile" accept=".json,application/json" style="display:none">
+          <input type="file" id="wbImportFile" accept=".json,application/json" multiple style="display:none">
           <button class="ghost" data-act="import-json">导入 JSON</button>
+          <button class="ghost" data-act="export-json">导出全部</button>
           <span class="muted" id="wbLoginState"></span>
         </div>
       </div>
@@ -376,7 +377,7 @@ async function api(path, method = 'GET', body) {
   return data;
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function fmtCredit(v) { return typeof v === 'number' && Number.isFinite(v) ? String(Math.round(v * 10000) / 10000) : '—'; }
+function fmtCredit(v) { return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '—'; }
 function wbState(text, scope) { if (!scope) return; document.querySelectorAll('.wbstate[data-state="' + scope + '"]').forEach(el => { el.textContent = text; }); }
 const OUTCOME_LABELS = { claimed: '领取成功', dispatched: '派发成功', waiting: '途中', arrived: '待领取', 'already-traveling': '已在途中', 'daily-limit': '今日上限', idle: '无行程', 'no-action': '无动作', skipped: '跳过', success: '成功', ok: '成功', already: '已签过', inactive: '未开放', error: '失败' };
 function summarizeOutcome(label, r) {
@@ -570,7 +571,8 @@ async function loadWb() {
         '<span class="muted">扫码登录可直接获取明文凭据；也可以导入包含 accessToken 的账号 JSON 文件。</span>' +
         '<div class="row"><button class="act" data-act="login-start" data-platform="workbuddy">扫码 WorkBuddy</button>' +
         '<button class="act" data-act="login-start" data-platform="ide">扫码 CodeBuddy</button>' +
-        '<button class="ghost" data-act="import-json">导入 JSON</button></div></div>';
+        '<button class="ghost" data-act="import-json">导入 JSON</button>' +
+        '<button class="ghost" data-act="export-json">导出全部</button></div></div>';
   } catch {}
   try {
     const cfg = await api('/checkin/config');
@@ -678,8 +680,8 @@ async function wbCredits() {
   document.getElementById('wbCredits').innerHTML = '<div class="kpi"><span>查询中…（逐账号请求官方接口，约需数秒）</span></div>';
   const r = await api('/credits');
   document.getElementById('wbCredits').innerHTML = (r.results || []).map(c => c.ok
-    ? '<div class="kpi"><span>' + esc(c.accountName) + '</span><b>' + c.totalRemaining + '</b><span>' +
-      (c.expiringSoon ? '<span class="soon">7天内到期 ' + c.expiringSoonRemaining + '</span>' : '') +
+    ? '<div class="kpi"><span>' + esc(c.accountName) + '</span><b>' + fmtCredit(c.totalRemaining) + '</b><span>' +
+      (c.expiringSoon ? '<span class="soon">7天内到期 ' + fmtCredit(c.expiringSoonRemaining) + '</span>' : '') +
       (c.soonestExpireAt ? ' · ' + new Date(c.soonestExpireAt).toLocaleDateString() : '') + '</span></div>'
     : '<div class="kpi"><span>' + esc(c.accountName) + '</span><b class="expired">—</b><span>' + esc(c.error) + '</span></div>').join('');
 }
@@ -928,6 +930,7 @@ document.addEventListener('click', async (ev) => {
     switch (act) {
       case 'login-start': await wbLogin(btn.dataset.platform || 'workbuddy'); break;
       case 'import-json': document.getElementById('wbImportFile').click(); break;
+      case 'export-json': await wbExportAccounts(); break;
       case 'run-all': await wbRunAll(); break;
       case 'update-check': await checkUpdateUI(false); break;
       case 'update-install': await installUpdateUI(); break;
@@ -970,25 +973,50 @@ document.addEventListener('click', async (ev) => {
 document.getElementById('logsAuto').addEventListener('change', (e) => setLogsAuto(e.target.checked));
 document.getElementById('wbImportFile').addEventListener('change', async () => {
   const input = document.getElementById('wbImportFile');
-  const file = input.files && input.files[0];
-  if (!file) return;
+  const files = Array.from(input.files || []);
+  if (files.length === 0) return;
   const state = document.getElementById('wbLoginState');
-  try {
-    const text = await file.text();
-    const r = await api('/accounts/import-json', 'POST', {
-      content: text,
-      variant: document.getElementById('wbVariant').value,
-    });
-    const skippedDetail = (r.skipped && r.skipped.length)
-      ? '；跳过：' + r.skipped.map(s => '#' + s.index + ' ' + s.reason).join('，')
-      : '';
-    state.textContent = '导入完成：新增 ' + (r.added || 0) + '，更新 ' + (r.updated || 0) + skippedDetail;
-    loadWb();
-  } catch (e) {
-    state.textContent = '导入失败: ' + (e && e.message ? e.message : e);
+  const variant = document.getElementById('wbVariant').value;
+  let added = 0, updated = 0;
+  const skipped = [];
+  const failures = [];
+  for (const file of files) {
+    try {
+      const r = await api('/accounts/import-json', 'POST', { content: await file.text(), variant });
+      added += r.added || 0;
+      updated += r.updated || 0;
+      for (const item of r.skipped || []) skipped.push(file.name + ' #' + item.index + ' ' + item.reason);
+    } catch (e) {
+      failures.push(file.name + ': ' + (e && e.message ? e.message : e));
+    }
   }
+  const parts = ['导入完成：' + files.length + ' 个文件，新增 ' + added + '，更新 ' + updated];
+  if (skipped.length) parts.push('跳过 ' + skipped.length + '（' + skipped.slice(0, 3).join('；') + (skipped.length > 3 ? '…' : '') + '）');
+  if (failures.length) parts.push('失败 ' + failures.length + '（' + failures.slice(0, 3).join('；') + '）');
+  state.textContent = parts.join('；');
+  loadWb();
   input.value = '';
 });
+
+async function wbExportAccounts() {
+  if (!confirm('导出文件包含全部账号的明文 accessToken / refreshToken，请妥善保管，确认导出？')) return;
+  const state = document.getElementById('wbLoginState');
+  try {
+    const data = await api('/accounts/export');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'wbpilot-accounts-' + stamp + '.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    state.textContent = '已导出 ' + ((data.accounts || []).length) + ' 个账号';
+  } catch (e) {
+    state.textContent = '导出失败: ' + (e && e.message ? e.message : e);
+  }
+}
 async function initDisclaimer() {
   try {
     const ack = await api('/ack');

@@ -640,6 +640,26 @@ export async function importAccountsJson(text: string, variant: 'cn' | 'ai'): Pr
   return { ok: true, added, updated, skipped: parsed.skipped, accounts: currentAccounts().map(accountMeta) }
 }
 
+/** 批量导出：只保留重新导入所需字段，明文凭据随文件外流，需提示用户。 */
+export async function exportAccountsJson(): Promise<Record<string, unknown>> {
+  await loadAccounts()
+  const accounts = currentAccounts().map((account) => ({
+    uid: account['uid'] ?? null,
+    nickname: account['nickname'] ?? null,
+    email: account['email'] ?? null,
+    enterpriseName: account['enterpriseName'] ?? null,
+    enterpriseId: account['enterpriseId'] ?? null,
+    domain: account['domain'] ?? null,
+    variant: account['variant'] ?? 'cn',
+    access_token: account['access_token'] ?? null,
+    refresh_token: account['refresh_token'] ?? null,
+    token_type: account['token_type'] ?? 'Bearer',
+    expiresAt: account['expiresAt'] ?? null,
+    refreshExpiresAt: account['refreshExpiresAt'] ?? null,
+  }))
+  return { version: 1, exportedAt: Date.now(), accounts }
+}
+
 export async function removeAccount(accountId: string): Promise<boolean> {
   await loadAccounts()
   const ok = deleteAccountFrom(currentAccounts(), accountId)
