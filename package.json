@@ -1,0 +1,97 @@
+{
+  "name": "wb-pilot",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.7.0",
+  "description": "多账号批量签到、成长任务与账号管理工具（Electron 便携版）",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "workbuddy",
+    "codebuddy",
+    "electron",
+    "account-manager",
+    "ai-gateway",
+    "windows"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && electron dist/main.cjs",
+    "serve": "tsx src/main.ts",
+    "serve:watch": "tsx watch src/main.ts",
+    "test": "vitest run",
+    "dist": "node build.mjs && electron-builder --win portable nsis",
+    "icon": "node make-icon.mjs",
+    "serve:headless": "node build.mjs && node dist/headless.cjs",
+    "mcp": "node build.mjs && node dist/mcp.cjs"
+  },
+  "devDependencies": {
+    "electron": "^37.6.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0"
+  },
+  "main": "dist/main.cjs",
+  "productName": "WB Pilot",
+  "author": "WB Pilot",
+  "build": {
+    "appId": "com.wbpilot.desktop",
+    "productName": "WB Pilot",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/main.cjs",
+      "dist/backend.cjs",
+      "build/icon.ico"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signtoolOptions": {
+        "certificateFile": "certs/wbpilot-signing.pfx",
+        "certificatePassword": "WBPilotSign2026!",
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      }
+    },
+    "portable": {
+      "artifactName": "WBPilot-portable.exe"
+    },
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "npmRebuild": false,
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WB Pilot",
+      "artifactName": "WBPilot-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
